@@ -1,0 +1,20 @@
+Cache2 I/O
+chrome
+chromium
+firefox
+apt
+dpkg
+dnf
+yum
+pacman
+tar
+gzip
+zip
+unzip
+7z
+xz
+gpg
+openssl
+ffmpeg
+vlc
+systemd-journal
