@@ -2,6 +2,7 @@
 #define __LINKER_H__
 
 #define READ_SZ 512
+#define PATH_MAX 4096
 
 typedef struct {
     __u32 pid;

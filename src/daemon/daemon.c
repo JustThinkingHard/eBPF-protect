@@ -14,67 +14,81 @@
 struct check_bpf *skel = NULL;
 volatile sig_atomic_t stop = 0;
 
-int update_map(char name[10240][16], struct bpf_map *map)
+int update_map(uint64_t inodes[10240], struct bpf_map *map)
 {
     FILE *fd = fopen("whitelist.txt", "r");
-    char **file = calloc(10240, sizeof(char *));
+    char *file = NULL;
+    char tmp[PATH_MAX];
+    __u64 list_inode[10240];
     int pos = 0;
     int present = 0;
-    whitelisted_t key;
+    __u64 key;
     size_t r_size = 0;
     __u8 val = 1;
+    const char *paths[] = {
+        "/usr/bin/",
+        "/usr/sbin/"
+    };
+    int size_paths = sizeof(paths) / sizeof(paths[0]);
+    struct stat s;
+
     if (!fd) {
         return -1;
     }
-    while (pos < 10240 && getline(&file[pos], &r_size, fd) != -1) {
-        if (strlen(file[pos]) > 15)
-            continue;
-        if (file[pos][strlen(file[pos]) - 1] == '\n')
-            file[pos][strlen(file[pos]) - 1] = '\0';
+    while (pos < 10240 && getline(&file, &r_size, fd) != -1) {
+        if (file[strlen(file) - 1] == '\n')
+            file[strlen(file) - 1] = '\0';
+        for (int i = 0; i < size_paths; i++) {
+            snprintf(tmp, 4096, "%s%s", paths[i], file);
+            if (!access(tmp, F_OK)) {
+                if (stat(tmp, &s))
+                    continue;
+                list_inode[pos] = s.st_ino;
+                break;
+            }
+        }
         pos++;
     }
-    for (int i = 0; name[i][0] != '\0'; i++) {
+    for (int i = 0; inodes[i] != 0; i++) {
         present = 0;
         for (int y = 0; y != pos; y++) {
-            if (!strncmp(name[i], file[y], 15)) {
+            if (inodes[i] == list_inode[y]) {
                 present = 1;
                 break;
             }
         }
         if (present == 0) {
-            strncpy(key.name, name[i], 16);
-            bpf_map__delete_elem(map, &key, sizeof(whitelisted_t), 0);
+            key = inodes[i];
+            bpf_map__delete_elem(map, &key, sizeof(__u64), 0);
         }
     }
 
     for (int i = 0; i != pos; i++) {
-        strncpy(key.name, file[i], 16);
-        bpf_map__update_elem(map, &key, sizeof(whitelisted_t), &val, sizeof(__u8), 0);
+        key = list_inode[i];
+        bpf_map__update_elem(map, &key, sizeof(__u64), &val, sizeof(__u8), 0);
     }
-    for (int i = 0; i != 10240; i++) free(file[i]);
     free(file);
     fclose(fd);
 }
 
 int update_whitelist(struct bpf_map *map)
 {
-    whitelisted_t next_key;
-    whitelisted_t key;
-    int ret = bpf_map__get_next_key(map, NULL, &next_key, sizeof(whitelisted_t));
-    char name[10240][16];
+    uint64_t next_key;
+    uint64_t key;
+    int ret = bpf_map__get_next_key(map, NULL, &next_key, sizeof(uint64_t));
+    uint64_t inodes[10240];
     int i = 0;
 
     while (ret != -ENOENT) {
-        strncpy(name[i], next_key.name, 16);
-        name[i][15] = '\0';
+        inodes[i] = key;
 
         key = next_key;
         i++;
-        ret = bpf_map__get_next_key(map, &key, &next_key, sizeof(whitelisted_t));
+        ret = bpf_map__get_next_key(map, &key, &next_key, sizeof(uint64_t));
     }
-    name[i][0] = '\0';
+    inodes[i] = 0;
 
-    update_map(name, map);
+    update_map(inodes, map);
     return 0;
 }
 

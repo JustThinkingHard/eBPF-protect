@@ -20,7 +20,7 @@ struct {
 struct {
  __uint(type, BPF_MAP_TYPE_HASH);
  __uint(max_entries, MAX_ENTRIES);
- __type(key, whitelisted_t);
+ __type(key, __u64);
  __type(value, __u8);
 } whitelist SEC(".maps");
 
@@ -31,14 +31,17 @@ int handle_tp(struct trace_event_raw_sys_enter *ctx)
     long x = 0;
     void *unsafe = (void*)(ctx->args[1]);
     unsigned long count = ctx->args[2];
-    __u8 name[16];
+    struct task_struct *task = bpf_get_current_task_btf();
+    __u64 current_inode;
     link_t *link;
-    if (bpf_get_current_comm(name, TASK_COMM_LEN)) {
-        bpf_printk("I AM ABOUT TO SEND DATA!\n");
+    if (!task) {
+        bpf_printk("Coudln't get task_struct\n");
         return 0;
     }
-    if (bpf_map_lookup_elem(&whitelist, name)) {
-        bpf_printk("I AM ABOUT TO SEND DATA!\n");
+    current_inode = task->mm->exe_file->f_inode->i_ino;
+    if (current_inode == 0)
+        return 0;
+    if (bpf_map_lookup_elem(&whitelist, &current_inode)) {
         return 0;
     }
 

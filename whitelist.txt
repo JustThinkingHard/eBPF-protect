@@ -1,4 +1,3 @@
-Cache2 I/O
 chrome
 chromium
 firefox
