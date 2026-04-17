@@ -14,7 +14,61 @@
 struct check_bpf *skel = NULL;
 volatile sig_atomic_t stop = 0;
 
-int update_map(uint64_t inodes[10240], struct bpf_map *map)
+void save_blacklist(struct bpf_map *map, link_t *data)
+{
+    FILE *fd = fopen("blacklist.txt", "a");
+
+    if (!fd)
+        return;
+
+    fprintf(fd, "%llu %s\n", data->inode, data->comm);
+    fclose(fd);
+}
+
+void update_blacklist(uint64_t inodes[10240], struct bpf_map *map)
+{
+    FILE *fd = fopen("blacklist.txt", "r");
+    char *file = NULL;
+    __u64 list_inode[10240];
+    int pos = 0;
+    int present = 0;
+    __u64 key;
+    size_t r_size = 0;
+    __u8 val = 1;
+
+    if (!fd) {
+        return;
+    }
+    while (pos < 10240 && getline(&file, &r_size, fd) != -1) {
+        if (file[strlen(file) - 1] == '\n')
+            file[strlen(file) - 1] = '\0';
+        sscanf(file, "%llu", &list_inode[pos]);
+        pos++;
+    }
+    for (int i = 0; inodes[i] != 0; i++) {
+        present = 0;
+        for (int y = 0; y != pos; y++) {
+            if (inodes[i] == list_inode[y]) {
+                present = 1;
+                break;
+            }
+        }
+        if (present == 0) {
+            key = inodes[i];
+            bpf_map__delete_elem(map, &key, sizeof(__u64), 0);
+        }
+    }
+
+    for (int i = 0; i != pos; i++) {
+        key = list_inode[i];
+        bpf_map__update_elem(map, &key, sizeof(__u64), &val, sizeof(__u8), 0);
+    }
+    free(file);
+    fclose(fd);
+    printf("Blacklist updated\n");
+}
+
+void update_whitelist(uint64_t inodes[10240], struct bpf_map *map)
 {
     FILE *fd = fopen("whitelist.txt", "r");
     char *file = NULL;
@@ -33,7 +87,7 @@ int update_map(uint64_t inodes[10240], struct bpf_map *map)
     struct stat s;
 
     if (!fd) {
-        return -1;
+        return;
     }
     while (pos < 10240 && getline(&file, &r_size, fd) != -1) {
         if (file[strlen(file) - 1] == '\n')
@@ -71,7 +125,7 @@ int update_map(uint64_t inodes[10240], struct bpf_map *map)
     fclose(fd);
 }
 
-int update_whitelist(struct bpf_map *map)
+void update_list(struct bpf_map *map, int color)
 {
     uint64_t next_key;
     uint64_t key;
@@ -88,8 +142,10 @@ int update_whitelist(struct bpf_map *map)
     }
     inodes[i] = 0;
 
-    update_map(inodes, map);
-    return 0;
+    if (color)
+        update_whitelist(inodes, map);
+    else
+        update_blacklist(inodes, map);
 }
 
 double calculate_shannon_entropy(uint8_t *data, size_t len) {
@@ -119,6 +175,7 @@ int entropy_calculus(void *ctx, void *data, size_t data_sz)
     printf("entropy : %f\n", entropy);
     if (entropy >= 7.3) {
         printf("PID %d, command %s, fd %d\n", data_check->pid, data_check->comm, data_check->fd);
+        save_blacklist(skel->maps.blacklist, data_check);
     }
     return 0;
 }
@@ -136,21 +193,27 @@ void stopping(int dummy)
 
 void daemonize()
 {
-    int efd;
-    int fd;
+    int efd, fd,  wd_whitelist, wd_blacklist;
     struct epoll_event ev, ev_rb, events[10];
+    struct inotify_event *event_inot;
     struct ring_buffer *rb;
     int rb_epoll_fd;
     int sz_events;
     char tmp[4096];
 
     fd = inotify_init();
-    if (!fd)
+    if (fd < 0)
         goto error;
+    wd_whitelist = inotify_add_watch(fd, "whitelist.txt", IN_MODIFY);
+    wd_blacklist = inotify_add_watch(fd, "blacklist.txt", IN_MODIFY);
+
+    if (wd_whitelist < 0 || wd_blacklist < 0) {
+        perror("inotify_add_watch failed");
+        goto error;
+    }
+
     ev.events = EPOLLIN;
     ev.data.fd = fd;
-    inotify_add_watch(fd, "whitelist.txt", IN_MODIFY);
-
 
     rb = ring_buffer__new(bpf_map__fd(skel->maps.rb), entropy_calculus, NULL, NULL);
     rb_epoll_fd = ring_buffer__epoll_fd(rb);
@@ -169,6 +232,9 @@ void daemonize()
         goto error_ctl;
 
     signal(SIGINT, stopping);
+    // Update lists before to make sure modifications have been written
+    update_list(skel->maps.whitelist, 1);
+    update_list(skel->maps.blacklist, 0);
     while(!stop) {
         sz_events = epoll_wait(efd, events, 10, -1);
         if (sz_events < 0) continue;
@@ -176,9 +242,13 @@ void daemonize()
             if (events[i].data.fd == rb_epoll_fd)
                 ring_buffer__consume(rb);
             else if (events[i].data.fd == fd) {
-                
-                update_whitelist(skel->maps.whitelist);
-                read(fd, tmp, 4096);
+                read(fd, tmp, sizeof(tmp));
+                event_inot = (struct inotify_event *)tmp;
+                if (event_inot->wd == wd_whitelist)
+                    update_list(skel->maps.whitelist, 1);
+                else if (event_inot->wd == wd_blacklist) {
+                    update_list(skel->maps.blacklist, 0);
+                }
             }
         }
     }

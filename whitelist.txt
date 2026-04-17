@@ -17,3 +17,5 @@ openssl
 ffmpeg
 vlc
 systemd-journal
+code
+python3

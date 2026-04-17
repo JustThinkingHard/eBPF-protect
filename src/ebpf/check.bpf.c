@@ -24,6 +24,13 @@ struct {
  __type(value, __u8);
 } whitelist SEC(".maps");
 
+struct {
+ __uint(type, BPF_MAP_TYPE_HASH);
+ __uint(max_entries, MAX_ENTRIES);
+ __type(key, __u64);
+ __type(value, __u8);
+} blacklist SEC(".maps");
+
 SEC("tp/syscalls/sys_enter_write")
 int handle_tp(struct trace_event_raw_sys_enter *ctx)
 {
@@ -42,6 +49,13 @@ int handle_tp(struct trace_event_raw_sys_enter *ctx)
     if (current_inode == 0)
         return 0;
     if (bpf_map_lookup_elem(&whitelist, &current_inode)) {
+        bpf_printk("%li is whitelisted\n", current_inode);
+        return 0;
+    }
+
+    if (bpf_map_lookup_elem(&blacklist, &current_inode)) {
+        bpf_printk("ERROR: %li is banned, killing the process\n", current_inode);
+        //bpf_send_signal(9);
         return 0;
     }
 
@@ -64,8 +78,8 @@ int handle_tp(struct trace_event_raw_sys_enter *ctx)
             goto error;
         }
         link->size = count;
+        link->inode = current_inode;
         bpf_ringbuf_submit(link, 0);
-        bpf_printk("I AM ABOUT TO SEND DATA!\n");
         return 0;
     }
 error:

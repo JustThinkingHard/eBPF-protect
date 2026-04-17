@@ -11,10 +11,7 @@ typedef struct {
     __u8 comm[16];
     __u64 size;
     __u8 data[READ_SZ];
+    __u64 inode;
 } link_t;
-
-typedef struct {
-    __u8 name[16];
-} whitelisted_t;
 
 #endif /* __LINKER_H__ */
