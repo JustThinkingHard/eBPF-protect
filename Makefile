@@ -17,6 +17,9 @@ HEADER = include/vmlinux.h
 OUTPUT = output/
 WHITELIST = whitelist.txt
 BLACKLIST = blacklist.txt
+TEST_SRC = test/test.c
+TEST_BIN = test/test
+TEST_OUTPUT = test/safe_test.txt
 
 all: build
 
@@ -39,7 +42,10 @@ $(WHITELIST):
 $(BLACKLIST):
 	@touch blacklist.txt
 
-build: $(ECC) $(ECLI) $(SRC_EBPF) $(HEADER) $(SRC_DAEMON) $(WHITELIST) $(BLACKLIST)
+$(TEST_BIN): $(TEST_SRC)
+	@$(CC) $< -o $@
+
+build: $(ECC) $(ECLI) $(SRC_EBPF) $(HEADER) $(SRC_DAEMON) $(WHITELIST) $(BLACKLIST) $(TEST_BIN)
 	$(ECC) $(SRC_EBPF) -o $(OUTPUT)
 	@bpftool gen skeleton $(OUTPUT)/check.bpf.o > $(SKEL)
 	@$(CC) $(SRC_DAEMON) -o $(DAEMON) -I include/ -lbpf -lm
@@ -50,4 +56,4 @@ clean:
 	@echo "[*] Cleaning files."
 
 fclean: clean
-	@rm  $(ECLI) $(ECC) $(HEADER) $(WHITELIST) $(BLACKLIST)
+	@rm  $(ECLI) $(ECC) $(HEADER) $(WHITELIST) $(BLACKLIST) $(TEST_BIN) $(TEST_OUTPUT) 2>/dev/null|| true
