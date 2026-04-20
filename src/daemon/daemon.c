@@ -72,33 +72,25 @@ void update_whitelist(uint64_t inodes[10240], struct bpf_map *map)
 {
     FILE *fd = fopen("whitelist.txt", "r");
     char *file = NULL;
-    char tmp[PATH_MAX];
     __u64 list_inode[10240];
     int pos = 0;
     int present = 0;
     __u64 key;
     size_t r_size = 0;
     __u8 val = 1;
-    const char *paths[] = {
-        "/usr/bin/",
-        "/usr/sbin/"
-    };
-    int size_paths = sizeof(paths) / sizeof(paths[0]);
     struct stat s;
 
     if (!fd) {
         return;
     }
     while (pos < 10240 && getline(&file, &r_size, fd) != -1) {
-        if (file[strlen(file) - 1] == '\n')
-            file[strlen(file) - 1] = '\0';
-        for (int i = 0; i < size_paths; i++) {
-            snprintf(tmp, 4096, "%s%s", paths[i], file);
-            if (!access(tmp, F_OK)) {
-                if (stat(tmp, &s))
-                    continue;
+        file[strcspn(file, "\r\n")] = 0;
+        if (!access(file, F_OK)) {
+            printf("[-] STAT %s\n", file);
+            if (stat(file, &s))
+                printf("[-] STAT FAILED for: %s\n", file);
+            else {
                 list_inode[pos] = s.st_ino;
-                break;
             }
         }
         pos++;
@@ -172,7 +164,6 @@ int entropy_calculus(void *ctx, void *data, size_t data_sz)
     link_t *data_check = (link_t *)data;
 
     double entropy = calculate_shannon_entropy(data_check->data, READ_SZ);
-    printf("entropy : %f\n", entropy);
     if (entropy >= 7.3) {
         printf("PID %d, command %s, fd %d\n", data_check->pid, data_check->comm, data_check->fd);
         save_blacklist(skel->maps.blacklist, data_check);

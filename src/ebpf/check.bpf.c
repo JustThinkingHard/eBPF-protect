@@ -55,7 +55,7 @@ int handle_tp(struct trace_event_raw_sys_enter *ctx)
 
     if (bpf_map_lookup_elem(&blacklist, &current_inode)) {
         bpf_printk("ERROR: %li is banned, killing the process\n", current_inode);
-        //bpf_send_signal(9);
+        bpf_send_signal(9);
         return 0;
     }
 

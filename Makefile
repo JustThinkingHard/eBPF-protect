@@ -15,6 +15,8 @@ EBPF = package.json
 SKEL = include/check.skel.h
 HEADER = include/vmlinux.h
 OUTPUT = output/
+WHITELIST = whitelist.txt
+BLACKLIST = blacklist.txt
 
 all: build
 
@@ -30,13 +32,22 @@ $(ECLI):
 $(HEADER):
 	@bpftool btf dump file /sys/kernel/btf/vmlinux format c > $(HEADER)
 
-build: $(ECC) $(ECLI) $(SRC_EBPF) $(HEADER) $(SRC_DAEMON)
+$(WHITELIST):
+	@echo "[*] Profiling system and building Zero-Trust Whitelist..."
+	@find -L /usr/bin /bin /sbin /usr/sbin /usr/libexec /usr/local/bin /usr/lib/apt/methods /usr/lib/git-core /usr/lib/firefox /usr/share/code /opt /snap/*/current/usr/bin -type f -executable 2>/dev/null > whitelist.txt || true
+
+$(BLACKLIST):
+	@touch blacklist.txt
+
+build: $(ECC) $(ECLI) $(SRC_EBPF) $(HEADER) $(SRC_DAEMON) $(WHITELIST) $(BLACKLIST)
 	$(ECC) $(SRC_EBPF) -o $(OUTPUT)
 	@bpftool gen skeleton $(OUTPUT)/check.bpf.o > $(SKEL)
-	$(CC) $(SRC_DAEMON) -o $(DAEMON) -I include/ -lbpf -lm
+	@$(CC) $(SRC_DAEMON) -o $(DAEMON) -I include/ -lbpf -lm
+	@echo "[*] Ready to launch EDR."
 
 clean:
-	rm -f $(SRC)/*.o $(OUTPUT)/*.json $(OUTPUT)/* $(SKEL) $(DAEMON)
+	@rm -f $(SRC)/*.o $(OUTPUT)/*.json $(OUTPUT)/* $(SKEL) $(DAEMON)
+	@echo "[*] Cleaning files."
 
 fclean: clean
-	rm  $(ECLI) $(ECC) $(HEADER)
+	@rm  $(ECLI) $(ECC) $(HEADER) $(WHITELIST) $(BLACKLIST)
