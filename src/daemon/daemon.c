@@ -165,7 +165,7 @@ int entropy_calculus(void *ctx, void *data, size_t data_sz)
 
     double entropy = calculate_shannon_entropy(data_check->data, READ_SZ);
     if (entropy >= 7.3) {
-        printf("WARNING Malicious program detected:\n Name:    %s\n Entropy: %f,\n inode:   %lli\n", data_check->comm, entropy, data_check->inode);
+        printf("WARNING Malicious program detected:\n Name:    %s\n Entropy: %f\n inode:   %lli\n", data_check->comm, entropy, data_check->inode);
         save_blacklist(skel->maps.blacklist, data_check);
     }
     return 0;
