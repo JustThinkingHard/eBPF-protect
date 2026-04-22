@@ -17,8 +17,8 @@ HEADER = include/vmlinux.h
 OUTPUT = output/
 WHITELIST = whitelist.txt
 BLACKLIST = blacklist.txt
-TEST_SRC = test/test.c
-TEST_BIN = test/test
+TEST_SRC = test/ransomware.c
+TEST_BIN = test/ransomware
 TEST_OUTPUT = test/safe_test.txt
 
 all: build

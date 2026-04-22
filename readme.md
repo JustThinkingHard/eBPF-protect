@@ -1,5 +1,7 @@
 # eBPF Zero-Trust Ransomware Executioner 🛡️🐧
 
+![alt text](image.png)
+
 A Proof-of-Concept Linux Endpoint Detection and Response (EDR) daemon built from scratch using **eBPF**, **Ring Buffers**, and **Shannon Entropy** math.
 
 Instead of relying on static malware signatures, this EDR mathematically profiles disk writes in real-time. If an untrusted binary begins writing highly randomized data (a hallmark of ransomware encryption), the eBPF kernel probe intercepts the system call and flags it as malicious. The user-space daemon then adds the binary's Inode to a blacklist, and any future write attempts are instantly killed in kernel space with zero latency.

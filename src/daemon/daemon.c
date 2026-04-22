@@ -65,7 +65,7 @@ void update_blacklist(uint64_t inodes[10240], struct bpf_map *map)
     }
     free(file);
     fclose(fd);
-    printf("Blacklist is updated\n");
+    printf("-- Blacklist has been updated --\n");
 }
 
 void update_whitelist(uint64_t inodes[10240], struct bpf_map *map)
@@ -114,7 +114,7 @@ void update_whitelist(uint64_t inodes[10240], struct bpf_map *map)
     }
     free(file);
     fclose(fd);
-    printf("Whitelist is updated\n");
+    printf("-- Whitelist has been updated --\n");
 }
 
 void update_list(struct bpf_map *map, int color)
@@ -165,7 +165,7 @@ int entropy_calculus(void *ctx, void *data, size_t data_sz)
 
     double entropy = calculate_shannon_entropy(data_check->data, READ_SZ);
     if (entropy >= 7.3) {
-        printf("PID %d, command %s, fd %d\n", data_check->pid, data_check->comm, data_check->fd);
+        printf("WARNING Malicious program detected:\n Name:    %s\n Entropy: %f,\n inode:   %lli\n", data_check->comm, entropy, data_check->inode);
         save_blacklist(skel->maps.blacklist, data_check);
     }
     return 0;
@@ -226,9 +226,7 @@ void daemonize()
     // Update lists before to make sure modifications have been written
     update_list(skel->maps.whitelist, 1);
     update_list(skel->maps.blacklist, 0);
-    printf("[*] ------------------------------- [*] \n");
-    printf("eBPF anti-ransomware running !\n");
-    printf("[*] ------------------------------- [*] \n");
+    printf("[*] ------- eBPF anti-ransomware running ! ------- [*]\n");
     while(!stop) {
         sz_events = epoll_wait(efd, events, 10, -1);
         if (sz_events < 0) continue;
