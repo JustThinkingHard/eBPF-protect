@@ -5,8 +5,6 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 
-const int pid_filter = 0;
-
 #define MAX_ENTRIES 10240
 
 
@@ -41,13 +39,11 @@ int handle_tp(struct trace_event_raw_sys_enter *ctx)
     struct task_struct *task = bpf_get_current_task_btf();
     __u64 current_inode;
     link_t *link;
-    if (!task) {
+    if (!task || !task->mm || !task->mm->exe_file) {
         bpf_printk("Coudln't get task_struct\n");
         return 0;
     }
     current_inode = task->mm->exe_file->f_inode->i_ino;
-    if (current_inode == 0)
-        return 0;
     if (bpf_map_lookup_elem(&whitelist, &current_inode)) {
         bpf_printk("%li is whitelisted\n", current_inode);
         return 0;

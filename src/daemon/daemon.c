@@ -65,7 +65,7 @@ void update_blacklist(uint64_t inodes[10240], struct bpf_map *map)
     }
     free(file);
     fclose(fd);
-    printf("Blacklist updated\n");
+    printf("Blacklist is updated\n");
 }
 
 void update_whitelist(uint64_t inodes[10240], struct bpf_map *map)
@@ -86,7 +86,6 @@ void update_whitelist(uint64_t inodes[10240], struct bpf_map *map)
     while (pos < 10240 && getline(&file, &r_size, fd) != -1) {
         file[strcspn(file, "\r\n")] = 0;
         if (!access(file, F_OK)) {
-            printf("[-] STAT %s\n", file);
             if (stat(file, &s))
                 printf("[-] STAT FAILED for: %s\n", file);
             else {
@@ -115,6 +114,7 @@ void update_whitelist(uint64_t inodes[10240], struct bpf_map *map)
     }
     free(file);
     fclose(fd);
+    printf("Whitelist is updated\n");
 }
 
 void update_list(struct bpf_map *map, int color)
@@ -226,6 +226,9 @@ void daemonize()
     // Update lists before to make sure modifications have been written
     update_list(skel->maps.whitelist, 1);
     update_list(skel->maps.blacklist, 0);
+    printf("[*] ------------------------------- [*] \n");
+    printf("eBPF anti-ransomware running !\n");
+    printf("[*] ------------------------------- [*] \n");
     while(!stop) {
         sz_events = epoll_wait(efd, events, 10, -1);
         if (sz_events < 0) continue;
