@@ -46,6 +46,7 @@ $(TEST_BIN): $(TEST_SRC)
 	@$(CC) $< -o $@
 
 build: $(ECC) $(ECLI) $(SRC_EBPF) $(HEADER) $(SRC_DAEMON) $(WHITELIST) $(BLACKLIST) $(TEST_BIN)
+	@mkdir $(OUTPUT) || true
 	$(ECC) $(SRC_EBPF) -o $(OUTPUT)
 	@bpftool gen skeleton $(OUTPUT)/check.bpf.o > $(SKEL)
 	@$(CC) $(SRC_DAEMON) -o $(DAEMON) -I include/ -lbpf -lm

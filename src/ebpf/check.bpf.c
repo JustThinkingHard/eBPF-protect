@@ -6,6 +6,11 @@
 #include <bpf/bpf_tracing.h>
 
 #define MAX_ENTRIES 10240
+#define MAY_WRITE  0x00000002
+#define MAY_APPEND 0x00000008
+#define ATTR_SIZE (1 << 3)
+
+#define EPERM 1
 
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -29,6 +34,50 @@ struct {
  __type(value, __u8);
 } blacklist SEC(".maps");
 
+SEC("lsm/inode_setattr")
+int BPF_PROG(check_trunc, struct dentry *dentry, struct iattr *attr)
+{
+    if (!(attr->ia_valid & ATTR_SIZE))
+        return 0;
+
+    struct task_struct *task = bpf_get_current_task_btf();
+    __u64 current_inode;
+
+    if (!task || !task->mm || !task->mm->exe_file) {
+        return 0;
+    }
+    current_inode = task->mm->exe_file->f_inode->i_ino;
+    
+    if (bpf_map_lookup_elem(&blacklist, &current_inode)) {
+        bpf_printk("ERROR: %llu is banned, we do not allow to truncate\n", current_inode);
+        return -EPERM;
+    }
+    return 0;
+}
+
+SEC("lsm/file_permission")
+int BPF_PROG(check_write, struct file *file, int mask)
+{
+    if (!(mask & (MAY_WRITE | MAY_APPEND))) {
+        return 0;
+    }
+
+    struct task_struct *task = bpf_get_current_task_btf();
+    __u64 current_inode;
+
+    if (!task || !task->mm || !task->mm->exe_file) {
+        return 0;
+    }
+    current_inode = task->mm->exe_file->f_inode->i_ino;
+    
+    if (bpf_map_lookup_elem(&blacklist, &current_inode)) {
+        bpf_printk("ERROR: %llu is banned, we do not allow the write\n", current_inode);
+        return -EPERM;
+    }
+    return 0;
+}
+
+
 SEC("tp/syscalls/sys_enter_write")
 int handle_tp(struct trace_event_raw_sys_enter *ctx)
 {
@@ -45,13 +94,11 @@ int handle_tp(struct trace_event_raw_sys_enter *ctx)
     }
     current_inode = task->mm->exe_file->f_inode->i_ino;
     if (bpf_map_lookup_elem(&whitelist, &current_inode)) {
-        bpf_printk("%li is whitelisted\n", current_inode);
         return 0;
     }
 
     if (bpf_map_lookup_elem(&blacklist, &current_inode)) {
-        bpf_printk("ERROR: %li is banned, killing the process\n", current_inode);
-        bpf_send_signal(9);
+        bpf_printk("ERROR: %llu is already banned\n", current_inode);
         return 0;
     }
 
